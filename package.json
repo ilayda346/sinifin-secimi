@@ -1,0 +1,21 @@
+{
+  "name": "sinifin-secimi-crud",
+  "version": "2.0.0",
+  "private": true,
+  "description": "QR kodlu sinif ici kalici CRUD oyunu",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev --name crud_game",
+    "db:seed": "node prisma/seed.js"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "prisma": "6.19.3"
+  }
+}

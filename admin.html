@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Öğretmen Paneli</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main class="wrap">
+<header class="hero">
+<h1>🧑‍🏫 Öğretmen Paneli</h1>
+<p class="muted">Sınıfın oylarını takip et ve çoğunluğun seçtiği CRUD kodunu çalıştır.</p>
+</header>
+
+<section class="panel" id="login">
+<h2>Öğretmen girişi</h2>
+<div class="row">
+<input id="key" type="password" placeholder="Öğretmen anahtarı">
+<button class="btn" id="enter">Giriş yap</button>
+</div>
+<small>Varsayılan anahtar: sinif2026</small>
+<p id="loginmsg"></p>
+</section>
+
+<div id="dashboard" class="hidden">
+
+<section class="panel">
+<h2>📱 Öğrenci Katılımı — QR Kod</h2>
+<p>Öğrenciler telefonlarıyla bu kodu okutarak oy kullanabilir.</p>
+<img id="qr" alt="Öğrenci QR kodu" width="220" height="220">
+<p id="studentUrl"></p>
+</section>
+
+<section class="panel">
+<div class="row">
+<h2 id="stage">Aşama</h2>
+<span id="total" class="muted"></span>
+</div>
+<div id="results" class="grid"></div>
+<div class="row" style="margin-top:16px">
+<button class="btn" id="execute">Çoğunluğun seçtiği kodu çalıştır</button>
+<button class="btn secondary" id="refresh">Yenile</button>
+<button class="btn danger" id="reset">Oyunu başa al</button>
+</div>
+<p id="message" class="notice">Öğrenciler oy kullandıkça sonuçlar güncellenir.</p>
+</section>
+
+<section class="panel">
+<h2>Kitaplık — Kalıcı CRUD</h2>
+<div id="books"></div>
+<h3>Öğretmen olarak kitap ekle</h3>
+<div class="row">
+<input id="newtitle" placeholder="Kitap adı">
+<input id="newauthor" placeholder="Yazar">
+<button class="btn" id="add">Kitap ekle</button>
+</div>
+</section>
+</div>
+</main>
+
+<script>
+let key="";
+const $=id=>document.getElementById(id);
+
+async function api(url,opts={}){
+const r=await fetch(url,{
+...opts,
+headers:{
+"Content-Type":"application/json",
+"x-admin-key":key,
+...opts.headers
+}
+});
+const d=await r.json();
+if(!r.ok)throw Error(d.error||"İşlem başarısız");
+return d;
+}
+
+function createQR(){
+const studentURL=window.location.origin+"/vote.html";
+$("studentUrl").textContent=studentURL;
+$("qr").src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data="+encodeURIComponent(studentURL);
+}
+
+async function load(){
+try{
+const d=await api("/api/admin");
+$("stage").textContent=d.stage==="DONE"?"Oyun tamamlandı":d.stageName;
+$("total").textContent=`${d.total} oy`;
+
+$("results").innerHTML=d.options.map(o=>`
+<article class="option">
+<h3>${o.label} — ${d.counts[o.key]||0} oy</h3>
+<p>${o.description}</p>
+<pre>${o.code}</pre>
+<div class="bar">
+<span style="width:${d.total?100*(d.counts[o.key]||0)/d.total:0}%"></span>
+</div>
+</article>
+`).join("");
+
+$("execute").disabled=!d.total||d.stage==="DONE";
+
+$("books").innerHTML=d.books.length?`
+<table>
+<tr><th>Kitap</th><th>Yazar</th><th>İşlem</th></tr>
+${d.books.map(b=>`
+<tr>
+<td>${esc(b.title)}</td>
+<td>${esc(b.author)}</td>
+<td>
+<button class="btn secondary" onclick="editBook(${b.id},'${esc(b.title).replace(/'/g,"&#39;")}','${esc(b.author).replace(/'/g,"&#39;")}')">Güncelle</button>
+<button class="btn danger" onclick="deleteBook(${b.id})">Sil</button>
+</td>
+</tr>
+`).join("")}
+</table>`:"Kitap bulunmuyor.";
+
+}catch(e){
+$("message").textContent=e.message;
+}
+}
+
+function esc(s){
+return String(s).replace(/[&<>"']/g,c=>({
+"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+}[c]));
+}
+
+$("enter").onclick=async()=>{
+key=$("key").value;
+try{
+await load();
+$("login").classList.add("hidden");
+$("dashboard").classList.remove("hidden");
+createQR();
+}catch(e){
+$("loginmsg").textContent=e.message;
+}
+};
+
+$("refresh").onclick=load;
+
+$("execute").onclick=async()=>{
+if(!confirm("Çoğunluğun seçtiği kod gerçek veritabanında çalıştırılacak. Devam edilsin mi?"))return;
+try{
+const d=await api("/api/admin/execute",{method:"POST",body:"{}"});
+$("message").textContent=`Kazanan: ${d.winner.description}. ${d.completedStage} işlemi tamamlandı.`;
+await load();
+}catch(e){
+$("message").textContent=e.message;
+}
+};
+
+$("reset").onclick=async()=>{
+if(!confirm("Oylar silinip oyun CREATE aşamasına dönecek. Kitaplar korunacak. Emin misiniz?"))return;
+try{
+await api("/api/admin/reset",{method:"POST",body:"{}"});
+$("message").textContent="Oyun başa alındı; mevcut kitaplar korundu.";
+await load();
+}catch(e){
+$("message").textContent=e.message;
+}
+};
+
+$("add").onclick=async()=>{
+try{
+await api("/api/admin/books",{
+method:"POST",
+body:JSON.stringify({
+title:$("newtitle").value,
+author:$("newauthor").value
+})
+});
+$("newtitle").value="";
+$("newauthor").value="";
+await load();
+}catch(e){alert(e.message)}
+};
+
+window.editBook=async(id,title,author)=>{
+const t=prompt("Yeni kitap adı:",title);
+if(t===null)return;
+const a=prompt("Yeni yazar:",author);
+if(a===null)return;
+try{
+await api(`/api/admin/books/${id}`,{
+method:"PUT",
+body:JSON.stringify({title:t,author:a})
+});
+await load();
+}catch(e){alert(e.message)}
+};
+
+window.deleteBook=async id=>{
+if(!confirm("Bu kitap kalıcı olarak silinsin mi?"))return;
+try{
+await api(`/api/admin/books/${id}`,{method:"DELETE"});
+await load();
+}catch(e){alert(e.message)}
+};
+</script>
+</body>
+</html>

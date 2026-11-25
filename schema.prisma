@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Book {
+  id        Int      @id @default(autoincrement())
+  title     String   @unique
+  author    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Vote {
+  id        Int      @id @default(autoincrement())
+  stage     String?
+  optionKey String?
+  voterKey  String
+  createdAt DateTime @default(now())
+
+  @@unique([stage, voterKey])
+}
+
+model GameState {
+  id          Int      @id
+  currentStage String  @default("CREATE")
+  updatedAt   DateTime @updatedAt
+}
